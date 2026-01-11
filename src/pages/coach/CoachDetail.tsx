@@ -35,8 +35,19 @@ const CoachDetail = () => {
     try {
       setLoading(true)
       const res = await getCoachDetail(coachId)
-      if (res.success && res.data) {
-        setCoach(res.data)
+      if (res.data.success && res.data.data) {
+        // API 返回的是嵌套结构，需要转换为扁平结构
+        const apiData = res.data.data
+        const transformedData: CoachDetailInfo = {
+          ...apiData.baseInfo,
+          username: apiData.username,
+          avatar: apiData.avatar,
+          certifications: apiData.professional?.certifications,
+          awards: apiData.professional?.awards,
+          educations: apiData.professional?.educations,
+          experiences: apiData.professional?.experiences,
+        }
+        setCoach(transformedData)
       }
     } catch (error) {
       console.error('Failed to fetch coach detail:', error)
@@ -84,7 +95,7 @@ const CoachDetail = () => {
       <div className={styles.header}>
         <Button
           icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/coach/list')}
+          onClick={() => navigate('/coach')}
         >
           返回列表
         </Button>

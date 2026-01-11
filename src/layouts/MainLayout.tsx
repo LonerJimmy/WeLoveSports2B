@@ -3,7 +3,6 @@ import { Layout, Menu, Dropdown, Avatar, theme } from 'antd'
 import {
   DashboardOutlined,
   TeamOutlined,
-  CalendarOutlined,
   ShoppingCartOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -17,7 +16,7 @@ const { Header, Sider, Content } = Layout
 
 const menuItems = [
   {
-    key: '/dashboard',
+    key: '/',
     icon: <DashboardOutlined />,
     label: '数据看板',
   },
@@ -25,21 +24,6 @@ const menuItems = [
     key: '/coach',
     icon: <TeamOutlined />,
     label: '教练管理',
-    children: [
-      {
-        key: '/coach/list',
-        label: '教练列表',
-      },
-      {
-        key: '/coach/detail',
-        label: '教练详情',
-      },
-    ],
-  },
-  {
-    key: '/schedule',
-    icon: <CalendarOutlined />,
-    label: '预约管理',
   },
   {
     key: '/order',
@@ -84,15 +68,12 @@ const MainLayout = () => {
   ]
 
   const getSelectedKeys = () => {
-    return [location.pathname]
-  }
-
-  const getOpenKeys = () => {
     const path = location.pathname
+    // 如果是教练相关路径，选中 /coach
     if (path.startsWith('/coach')) {
       return ['/coach']
     }
-    return []
+    return [path]
   }
 
   return (
@@ -104,7 +85,7 @@ const MainLayout = () => {
         className={styles.sider}
         style={{ background: token.colorBgContainer }}
       >
-        <div className={styles.logo} onClick={() => navigate('/dashboard')}>
+        <div className={styles.logo} onClick={() => navigate('/')}>
           <span className={styles.logoText}>
             {sidebarCollapsed ? '教练' : '教练管理系统'}
           </span>
@@ -112,7 +93,6 @@ const MainLayout = () => {
         <Menu
           mode="inline"
           selectedKeys={getSelectedKeys()}
-          defaultOpenKeys={getOpenKeys()}
           items={menuItems}
           onClick={handleMenuClick}
           style={{ borderRight: 0 }}

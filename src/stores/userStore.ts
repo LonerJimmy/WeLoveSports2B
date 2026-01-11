@@ -8,6 +8,7 @@ interface UserState {
   userInfo: CompleteUserInfo | null
   isAuthenticated: boolean
   isCoach: boolean
+  hasHydrated: boolean
 
   // Actions
   setToken: (token: string) => void
@@ -15,6 +16,7 @@ interface UserState {
   login: (token: string) => void
   logout: () => void
   getUserInfo: () => Promise<void>
+  setHasHydrated: (state: boolean) => void
 }
 
 export const useUserStore = create<UserState>()(
@@ -24,9 +26,9 @@ export const useUserStore = create<UserState>()(
       userInfo: null,
       isAuthenticated: false,
       isCoach: false,
+      hasHydrated: false,
 
       setToken: (token: string) => {
-        localStorage.setItem('token', token)
         set({ token })
       },
 
@@ -39,12 +41,10 @@ export const useUserStore = create<UserState>()(
       },
 
       login: (token: string) => {
-        localStorage.setItem('token', token)
         set({ token, isAuthenticated: true })
       },
 
       logout: () => {
-        localStorage.removeItem('token')
         set({
           token: null,
           userInfo: null,
@@ -53,14 +53,20 @@ export const useUserStore = create<UserState>()(
         })
       },
 
+      setHasHydrated: (state: boolean) => {
+        set({
+          hasHydrated: state
+        })
+      },
+
       getUserInfo: async () => {
         try {
           const res = await getUserInfoApi()
-          if (res.success && res.data) {
+          if (res.data.success && res.data.data) {
             set({
-              userInfo: res.data,
+              userInfo: res.data.data,
               isAuthenticated: true,
-              isCoach: res.data.isCoach || false,
+              isCoach: res.data.data.isCoach || false,
             })
           }
         } catch (error) {
@@ -76,6 +82,9 @@ export const useUserStore = create<UserState>()(
         isAuthenticated: state.isAuthenticated,
         isCoach: state.isCoach,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

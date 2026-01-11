@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Form, Input, Button, message } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useUserStore } from '@/stores'
 import { login } from '@/api'
 import type { LoginRequest } from '@/types'
@@ -9,15 +9,32 @@ import styles from './Login.module.scss'
 
 const Login = () => {
   const navigate = useNavigate()
-  const { login: setUserLogin, getUserInfo } = useUserStore()
+  const location = useLocation()
+  const { login: setUserLogin, isAuthenticated, hasHydrated } = useUserStore()
   const [loading, setLoading] = useState(false)
+
+  // 从 URL search 参数或 state 中获取登录前的页面路径
+  const searchParams = new URLSearchParams(location.search)
+  const redirectParam = searchParams.get('redirect')
+  const from = redirectParam ? decodeURIComponent(redirectParam) : ((location.state as any)?.from || '/')
+
+  // 监听登录状态，登录成功后跳转
+  useEffect(() => {
+    // 只有当前在登录页面时才执行跳转逻辑
+    if (location.pathname !== '/login') {
+      return
+    }
+    if (isAuthenticated && hasHydrated) {
+      navigate(from, { replace: true })
+    }
+  }, [isAuthenticated, hasHydrated, navigate, from, location.pathname])
 
   const handleLogin = async (values: any) => {
     try {
       setLoading(true)
       const data: LoginRequest = {
-        loginType: 'username',
-        username: values.username,
+        loginType: 'phone',
+        phone: values.phone,
         password: values.password,
         head: {
           userLongitude: 121.473701,
@@ -26,11 +43,10 @@ const Login = () => {
       }
 
       const res = await login(data)
-      if (res.success && res.data) {
-        setUserLogin(res.data)
-        await getUserInfo()
+      if (res.data.success && res.data.data) {
+        const token = typeof res.data.data === 'string' ? res.data.data : res.data.data.token
+        setUserLogin(token)
         message.success('登录成功')
-        navigate('/dashboard')
       }
     } catch (error) {
       console.error('Login failed:', error)
@@ -39,17 +55,25 @@ const Login = () => {
     }
   }
 
+  // 如果不在登录页面，不渲染任何内容
+  if (location.pathname !== '/login') {
+    return null
+  }
+
   return (
     <div className={styles.login}>
       <h2 className={styles.title}>教练登录</h2>
       <Form onFinish={handleLogin} autoComplete="off">
         <Form.Item
-          name="username"
-          rules={[{ required: true, message: '请输入用户名' }]}
+          name="phone"
+          rules={[
+            { required: true, message: '请输入手机号' },
+            { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号' },
+          ]}
         >
           <Input
             prefix={<UserOutlined />}
-            placeholder="用户名"
+            placeholder="手机号"
             size="large"
           />
         </Form.Item>

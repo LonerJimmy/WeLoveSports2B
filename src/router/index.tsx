@@ -4,22 +4,18 @@ import ProtectedRoute from '@/components/common/ProtectedRoute'
 import Login from '@/pages/auth/Login'
 import Dashboard from '@/pages/dashboard/Dashboard'
 import CoachList from '@/pages/coach/CoachList'
-import CoachDetail from '@/pages/coach/CoachDetail'
-import ScheduleManage from '@/pages/schedule/ScheduleManage'
 import OrderManage from '@/pages/order/OrderManage'
 
 const router = createBrowserRouter([
   {
-    path: '/',
-    element: <Navigate to="/dashboard" replace />,
-  },
-  {
     path: '/login',
-    element: (
-      <AuthLayout>
-        <Login />
-      </AuthLayout>
-    ),
+    element: <AuthLayout />,
+    children: [
+      {
+        index: true,
+        element: <Login />,
+      },
+    ],
   },
   {
     path: '/',
@@ -30,29 +26,12 @@ const router = createBrowserRouter([
     ),
     children: [
       {
-        path: 'dashboard',
+        index: true,
         element: <Dashboard />,
       },
       {
         path: 'coach',
-        children: [
-          {
-            index: true,
-            element: <Navigate to="/coach/list" replace />,
-          },
-          {
-            path: 'list',
-            element: <CoachList />,
-          },
-          {
-            path: 'detail/:coachId',
-            element: <CoachDetail />,
-          },
-        ],
-      },
-      {
-        path: 'schedule',
-        element: <ScheduleManage />,
+        element: <CoachList />,
       },
       {
         path: 'order',
@@ -62,12 +41,8 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <Navigate to="/dashboard" replace />,
+    element: <Navigate to="/" replace />,
   },
-], {
-  future: {
-    v7_startTransition: true,
-  },
-})
+])
 
 export default router

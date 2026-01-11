@@ -1,4 +1,22 @@
-import { Head } from './common'
+// 运动类型
+export interface SportType {
+  id: number
+  name: string
+  icon: string
+  sort: number
+}
+
+// 运动领域
+export interface SportDomain {
+  domainId: string
+  domainName: string
+  sportTypes: SportType[]
+}
+
+// 运动类型响应
+export interface SportTypesResponse {
+  domains: SportDomain[]
+}
 
 // 教练基础信息
 export interface CoachBasicInfo {
@@ -127,9 +145,12 @@ export interface CoachSchedule {
 }
 
 // 设置预约时间请求
-export interface SetScheduleRequest extends Head {
+export interface SetScheduleRequest {
+  head?: {
+    userLongitude?: number
+    userLatitude?: number
+  }
   coachId: string
-  hourlyRate?: number
   schedules: ScheduleItem[]
 }
 
@@ -149,7 +170,13 @@ export interface ScheduleItem {
 }
 
 // 教练查询参数
-export interface CoachQueryParams extends Head {
+export interface CoachQueryParams {
+  head?: {
+    clientId?: string
+    userId?: string
+    userLongitude?: number
+    userLatitude?: number
+  }
   cityId?: number
   cityName?: string
   area?: string

@@ -16,7 +16,16 @@ request.interceptors.request.use(
     // 从 localStorage 获取 token
     const token = localStorage.getItem('token')
     if (token && config.headers) {
+      // 添加到请求头（API 文档要求的格式）
       config.headers.authorization = token
+
+      // 如果请求体包含 head 对象，也添加到 head 中
+      if (config.data && typeof config.data === 'object' && 'head' in config.data) {
+        config.data.head = {
+          ...config.data.head,
+          authorization: token,
+        }
+      }
     }
     return config
   },
