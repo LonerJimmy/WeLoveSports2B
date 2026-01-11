@@ -1,0 +1,82 @@
+.layout {
+  width: 100%;
+  height: 100%;
+}
+
+.sider {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+  z-index: 10;
+}
+
+.logo {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color-split);
+}
+
+.logoText {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.header {
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  z-index: 9;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+}
+
+.trigger {
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.3s;
+
+  &:hover {
+    color: var(--primary-color);
+  }
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: var(--bg-hover);
+  }
+}
+
+.username {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.content {
+  margin: 24px;
+  padding: 24px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius);
+  min-height: calc(100vh - 112px);
+  overflow: auto;
+}

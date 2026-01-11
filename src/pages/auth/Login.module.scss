@@ -1,0 +1,27 @@
+.login {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+
+  .title {
+    text-align: center;
+    margin-bottom: 32px;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .ant-form-item {
+    margin-bottom: 24px;
+  }
+
+  :global {
+    .ant-input,
+    .ant-input-password,
+    .ant-btn {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+  }
+}
