@@ -1,9 +1,11 @@
-import { Card, Row, Col, Statistic } from 'antd'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, Row, Col, Statistic, Button, Spin } from 'antd'
 import {
   UserOutlined,
   TeamOutlined,
   ShoppingCartOutlined,
   DollarOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import {
   AreaChart,
@@ -19,74 +21,97 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  LineChart,
-  Line,
 } from 'recharts'
-import { useUserStore } from '@/stores'
+import { getStatisticsOverview } from '@/api'
+import type { StatisticsOverviewData, OrderStatBySportType } from '@/api'
 import styles from './Dashboard.module.scss'
 
-// 模拟数据
-const weeklyData = [
-  { day: '周一', orders: 12, revenue: 3600 },
-  { day: '周二', orders: 19, revenue: 5200 },
-  { day: '周三', orders: 15, revenue: 4800 },
-  { day: '周四', orders: 22, revenue: 6400 },
-  { day: '周五', orders: 28, revenue: 8200 },
-  { day: '周六', orders: 35, revenue: 10500 },
-  { day: '周日', orders: 32, revenue: 9600 },
-]
-
-const sportTypeData = [
-  { name: '篮球', value: 35, color: '#1890ff' },
-  { name: '瑜伽', value: 28, color: '#52c41a' },
-  { name: '游泳', value: 18, color: '#faad14' },
-  { name: '健身', value: 12, color: '#f5222d' },
-  { name: '其他', value: 7, color: '#722ed1' },
-]
-
-const monthlyData = [
-  { month: '1月', orders: 120, revenue: 36000 },
-  { month: '2月', orders: 145, revenue: 43500 },
-  { month: '3月', orders: 168, revenue: 50400 },
-  { month: '4月', orders: 192, revenue: 57600 },
-  { month: '5月', orders: 215, revenue: 64500 },
-  { month: '6月', orders: 238, revenue: 71400 },
-]
+const PIE_COLORS = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96']
 
 const Dashboard = () => {
-  const { userInfo } = useUserStore()
+  const [loading, setLoading] = useState(true)
+  const [overview, setOverview] = useState<StatisticsOverviewData | null>(null)
 
-  const stats = [
-    {
-      title: '总用户数',
-      value: 1234,
-      prefix: <UserOutlined />,
-      suffix: '人',
-    },
-    {
-      title: '教练总数',
-      value: 86,
-      prefix: <TeamOutlined />,
-      suffix: '人',
-    },
-    {
-      title: '总订单数',
-      value: 5678,
-      prefix: <ShoppingCartOutlined />,
-      suffix: '单',
-    },
-    {
-      title: '总营收',
-      value: 128900,
-      prefix: <DollarOutlined />,
-      suffix: '元',
-      precision: 2,
-    },
-  ]
+  const fetchOverview = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await getStatisticsOverview()
+      if (res.data.success && res.data.data) {
+        setOverview(res.data.data)
+      }
+    } catch (error) {
+      console.error('[Dashboard] getStatisticsOverview 请求失败:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchOverview()
+  }, [fetchOverview])
+
+  const stats = overview
+    ? [
+        {
+          title: '总用户数',
+          value: overview.totalUserCount,
+          prefix: <UserOutlined />,
+          suffix: '人',
+        },
+        {
+          title: '教练总数',
+          value: overview.totalCoachCount,
+          prefix: <TeamOutlined />,
+          suffix: '人',
+        },
+        {
+          title: '总订单数',
+          value: overview.totalOrderCount,
+          prefix: <ShoppingCartOutlined />,
+          suffix: '单',
+        },
+        {
+          title: '总营收',
+          value: overview.totalRevenue,
+          prefix: <DollarOutlined />,
+          suffix: '元',
+          precision: 2,
+        },
+      ]
+    : []
+
+  const monthlyChartData =
+    overview?.monthlyStats?.map((m) => ({
+      month: m.month,
+      orders: m.orderCount,
+      revenue: Number(Number(m.revenue).toFixed(2)),
+    })) ?? []
+
+  const sportTypeChartData: { name: string; value: number; color: string }[] =
+    overview?.orderStatsBySportType?.map((s: OrderStatBySportType, i: number) => ({
+      name: s.sportTypeName,
+      value: s.orderCount,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+    })) ?? []
+
+  if (loading && !overview) {
+    return (
+      <div className={styles.dashboard}>
+        <div className={styles.spinWrap}>
+          <Spin size="large" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.dashboard}>
-      <h2 className={styles.title}>数据看板</h2>
+      <div className={styles.header}>
+        <h2 className={styles.title}>数据看板</h2>
+        <Button type="primary" icon={<ReloadOutlined />} onClick={fetchOverview} loading={loading}>
+          刷新数据
+        </Button>
+      </div>
 
       <Row gutter={16} className={styles.stats}>
         {stats.map((stat) => (
@@ -107,9 +132,9 @@ const Dashboard = () => {
 
       <Row gutter={16} className={styles.charts}>
         <Col xs={24} lg={16}>
-          <Card title="近7天订单趋势" className={styles.chartCard}>
+          <Card title="月度订单与营收趋势" className={styles.chartCard}>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={weeklyData}>
+              <AreaChart data={monthlyChartData}>
                 <defs>
                   <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1890ff" stopOpacity={0.8} />
@@ -121,7 +146,7 @@ const Dashboard = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
+                <XAxis dataKey="month" />
                 <YAxis yAxisId="left" />
                 <YAxis yAxisId="right" orientation="right" />
                 <Tooltip />
@@ -154,7 +179,7 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={sportTypeData}
+                  data={sportTypeChartData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -163,7 +188,7 @@ const Dashboard = () => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {sportTypeData.map((entry, index) => (
+                  {sportTypeChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -178,7 +203,7 @@ const Dashboard = () => {
         <Col xs={24}>
           <Card title="月度营收统计" className={styles.chartCard}>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlyData}>
+              <BarChart data={monthlyChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />

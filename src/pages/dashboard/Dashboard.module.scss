@@ -2,11 +2,25 @@
   width: 100%;
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
 .title {
   font-size: 20px;
   font-weight: 600;
-  margin-bottom: 24px;
+  margin: 0;
   color: var(--text-primary);
+}
+
+.spinWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
 }
 
 .stats {

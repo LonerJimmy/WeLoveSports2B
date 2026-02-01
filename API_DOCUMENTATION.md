@@ -4,7 +4,7 @@
 **最后更新**: 2026-02-01
 
 ## 基础路径
-本文档包含多个模块，各接口完整路径见各节：用户 `/user`、教练 `/coach`、教练注册 `/coach/registration`、预约 `/book`、订单 `/order`、领域 `/domain`。
+本文档包含多个模块，各接口完整路径见各节：用户 `/user`、教练 `/coach`、教练注册 `/coach/registration`、预约 `/book`、订单 `/order`、领域 `/domain`、统计 `/statistics`。
 
 ## 1. 发送验证码
 
@@ -2256,3 +2256,59 @@ Content-Type: `application/json`
 - 城市、地区数据来自 **qdd_city**、**qdd_area** 表；`domains` 按 `domainId`、运动类型 `sort` 升序；`cities` 首项为全国（cityId=0），其余按 sort、城市名称升序；`areas` 按 city_id、sort、地区名称升序
 - 教练列表/教练注册等接口中的 `domainId`、`sportTypeId` 与本接口返回的 `domainId`、`sportTypes[].id` 对应；`cityId` 对应 `cities[].cityId`；`areaId` 对应 `areas[].areaId`
 - `cities`、`areas` 可用于教练列表筛选：调用 `/coach/queryByAll` 时传 `cityId`（0 或 -1 为全国，返回所有城市教练）、`areaId` 或 `area` 等
+
+---
+
+## 14. 概览数据（看所有数据）
+
+### 接口地址
+```
+POST /statistics/overview
+```
+
+### 请求方式
+Content-Type: `application/json`
+
+### 请求体
+无需请求体（可不传 body，或传空对象 `{}`）。
+
+### 响应示例
+```json
+{
+  "success": true,
+  "data": {
+    "totalUserCount": 100,
+    "totalCoachCount": 20,
+    "monthlyStats": [
+      { "month": "2025-01", "orderCount": 15, "revenue": 3200.00 },
+      { "month": "2025-02", "orderCount": 22, "revenue": 4800.50 }
+    ],
+    "totalOrderCount": 150,
+    "totalRevenue": 35000.00,
+    "orderStatsBySportType": [
+      { "sportTypeId": 1, "sportTypeName": "羽毛球", "orderCount": 45, "revenue": 9000.00 },
+      { "sportTypeId": 2, "sportTypeName": "网球", "orderCount": 38, "revenue": 7600.00 }
+    ]
+  }
+}
+```
+
+### 响应字段说明
+- `totalUserCount`: 总用户数（qdd_user 表）
+- `totalCoachCount`: 总教练数（qdd_coach 表）
+- `monthlyStats`: 按月统计（仅统计已支付订单）
+  - `month`: 月份，格式 yyyy-MM
+  - `orderCount`: 该月订单数
+  - `revenue`: 该月收益（元）
+- `totalOrderCount`: 总订单数（已支付）
+- `totalRevenue`: 总收益（元，已支付订单实付金额合计）
+- `orderStatsBySportType`: 按运动类型统计（订单关联教练的主运动类型，仅已支付订单）
+  - `sportTypeId`: 运动类型ID（qdd_sport_info.id）
+  - `sportTypeName`: 运动类型名称
+  - `orderCount`: 该运动类型订单数
+  - `revenue`: 该运动类型收益（元）
+
+### 注意事项
+- 无需登录即可调用
+- 订单与收益仅统计支付状态为已支付（payment_status=1）的订单
+- 运动类型取订单关联教练的 `sport_type_ids` 中第一个 ID；无教练或无运动类型时归为「未知」
