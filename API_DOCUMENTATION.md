@@ -1,10 +1,10 @@
 # 用户登录和注册接口文档
 
-**文档版本**: v1.5.0  
-**最后更新**: 2025-12-23
+**文档版本**: v1.5.3  
+**最后更新**: 2026-02-01
 
 ## 基础路径
-所有接口的基础路径：`/user`
+本文档包含多个模块，各接口完整路径见各节：用户 `/user`、教练 `/coach`、教练注册 `/coach/registration`、预约 `/book`、订单 `/order`、领域 `/domain`。
 
 ## 1. 发送验证码
 
@@ -443,15 +443,7 @@ authorization: token字符串（可选，如果提供则返回用户信息）
 ```
 
 ### 请求体
-无需请求体，或可包含空的head对象：
-```json
-{
-  "head": {
-    "userLongitude": 121.473701,
-    "userLatitude": 31.230416
-  }
-}
-```
+无需请求体（可不传 body，或传空对象 `{}`）。
 
 ### 响应示例
 
@@ -460,7 +452,11 @@ authorization: token字符串（可选，如果提供则返回用户信息）
 {
   "success": true,
   "data": {
-    "sportTypes": ["投篮", "运球", "防守", "哈他瑜伽", "流瑜伽", "阴瑜伽"],
+    "sportInfos": [
+      { "id": 1, "name": "羽毛球", "domainName": "球类运动", "domainId": "1" },
+      { "id": 2, "name": "乒乓球", "domainName": "球类运动", "domainId": "1" },
+      { "id": 23, "name": "哈他瑜伽", "domainName": "瑜伽", "domainId": "4" }
+    ],
     "userInfo": {
       "userId": "user_001",
       "username": "张三",
@@ -476,12 +472,14 @@ authorization: token字符串（可选，如果提供则返回用户信息）
 }
 ```
 
-**成功响应（无用户信息，未提供token或token无效）：**
+**成功响应（无用户信息，未提供 token 或 token 无效）：**
 ```json
 {
   "success": true,
   "data": {
-    "sportTypes": ["投篮", "运球", "防守", "哈他瑜伽", "流瑜伽", "阴瑜伽"],
+    "sportInfos": [
+      { "id": 1, "name": "羽毛球", "domainName": "球类运动", "domainId": "1" }
+    ],
     "userInfo": null
   }
 }
@@ -489,17 +487,17 @@ authorization: token字符串（可选，如果提供则返回用户信息）
 
 ### 响应字段说明
 
-- `sportTypes`: 所有运动类型列表（字符串数组）
-- `userInfo`: 用户信息对象（如果提供了有效的token）
-  - `userId`: 用户ID（String类型，业务标识符）
-  - `username`: 用户名（原 username 和 nickname 合并）
-  - `avatar`: 头像URL
+- `sportInfos`: 运动类型列表（数组），每项包含 `id`（Long）、`name`（类型名称）、`domainName`（大领域名称）、`domainId`（大领域ID）
+- `userInfo`: 用户信息对象（若提供有效 token 则有值，否则为 null）
+  - `userId`: 用户ID（String 类型，业务标识符）
+  - `username`: 用户名
+  - `avatar`: 头像 URL
   - `phone`: 手机号
   - `email`: 邮箱
   - `gender`: 性别（0：男，1：女）
-  - `cityId`: 城市ID
+  - `cityId`: 城市 ID
   - `cityName`: 城市名称
-  - `coachId`: 教练ID（String类型，业务标识符）（String类型，如果用户注册为教练则有值）
+  - `coachId`: 教练 ID（String 类型，若用户已注册为教练则有值）
 
 ### 注意事项
 
@@ -554,7 +552,8 @@ authorization: token字符串（必须）
     "height": 180.00,
     "weight": 75.00,
     "coachAddress": "工作地址（可选）",
-    "coachArea": "工作商圈（可选）",
+    "areaId": 1,
+    "coachArea": "工作商圈（可选，当 areaId 有值时以 qdd_area 为准）",
     "coachLongitude": 121.473701,
     "coachLatitude": 31.230416
   },
@@ -622,8 +621,8 @@ authorization: token字符串（必须）
 - `phone`: 手机号（可选）
 - `email`: 邮箱（可选）
 - `gender`: 性别（0：男，1：女，可选）
-- `cityId`: 城市ID（可选）
-- `cityName`: 城市名称（可选）
+- `cityId`: 城市ID（可选，关联 **qdd_city.id**，有值时城市名称从城市表解析）
+- `cityName`: 城市名称（可选，当未传 cityId 时使用）
 
 #### coachBasicInfo 字段
 - `avatar`: 头像URL（可选，如果userInfo中未提供则使用此字段）
@@ -635,7 +634,8 @@ authorization: token字符串（必须）
 - `height`: 身高（可选，厘米，BigDecimal）
 - `weight`: 体重（可选，公斤，BigDecimal）
 - `coachAddress`: 工作地址（可选，会同步到用户表的address字段）
-- `coachArea`: 工作商圈（可选，会同步到用户表的area字段）
+- `areaId`: 工作商圈ID（可选，Long类型，关联 **qdd_area.id**，有值时商圈名称从地区表解析，会同步到用户表 area_id、教练表 area_id）
+- `coachArea`: 工作商圈名称（可选，当未传 areaId 时使用，会同步到用户表 area、教练表 c_area）
 - `coachLongitude`: 工作经度（可选，会同步到用户表的lon字段）
 - `coachLatitude`: 工作纬度（可选，会同步到用户表的lat字段）
 
@@ -829,7 +829,7 @@ authorization: token字符串（可选）
 - `username`: 用户名
 - `avatar`: 头像URL
 - `baseInfo`: 教练基础信息对象
-  - `coachId`: 教练ID（String类型，业务标识符）（String类型，业务标识符）
+  - `coachId`: 教练ID（String类型，业务标识符）
   - `introduction`: 个人介绍
   - `experienceYears`: 经验年限
   - `sportTypeIds`: 运动类型ID列表
@@ -855,7 +855,7 @@ authorization: token字符串（可选）
 - `courseSchedules`: 课程时间安排列表（已废弃）
 - `coachSchedules`: 教练可预约时间段列表
   - `id`: 时间安排ID（Long类型，自增主键）
-  - `coachId`: 教练ID（String类型，业务标识符）（String类型，业务标识符）
+  - `coachId`: 教练ID（String类型，业务标识符）
   - `scheduleDate`: 安排日期（格式：yyyy-MM-dd）
   - `startTime`: 开始时间（格式：HH:mm:ss）
   - `endTime`: 结束时间（格式：HH:mm:ss）
@@ -875,11 +875,16 @@ authorization: token字符串（可选）
 - `isOnline`: 是否在线（0：离线，1：在线）
 - `status`: 状态（0：禁用，1：启用）
 
-### 9.2 根据城市查询教练列表
+### 9.2 教练列表查询（queryByAll）
+
+支持按**城市、运动类型、区域、手机号**等组合筛选，所有筛选参数均为可选；不传任何筛选条件时返回所有教练。多个条件之间为 **AND** 关系。
+
+- **全国**：请求时传 `cityId: 0` 或 `cityId: -1` 表示全国，接口**不按城市筛选**，返回**所有城市**的教练；城市列表来自 `/domain/getAllFilterTypes`，其中「全国」为 `cityId: 0`。
+- **手机号**：传 `phone` 时按教练关联用户（qdd_user）的手机号**模糊匹配**，可与城市、运动类型、区域等条件同时使用。
 
 #### 接口地址
 ```
-POST /coach/queryByCity
+POST /coach/queryByAll
 ```
 
 #### 请求方式
@@ -894,67 +899,11 @@ Content-Type: `application/json`
   },
   "cityId": 1,
   "cityName": "上海",
-  "pageNum": 1,
-  "pageSize": 10,
-  "sortBy": "rating",
-  "sortOrder": "desc",
-  "maxDistance": 10.0
-}
-```
-
-### 9.3 根据运动类型查询教练列表
-
-#### 接口地址
-```
-POST /coach/queryByType
-```
-
-#### 请求方式
-Content-Type: `application/json`
-
-#### 请求体
-```json
-{
-  "head": {
-    "userLongitude": 121.473701,
-    "userLatitude": 31.230416
-  },
   "domainId": "1",
   "sportTypeId": 1,
-  "pageNum": 1,
-  "pageSize": 10,
-  "sortBy": "rating",
-  "sortOrder": "desc",
-  "maxDistance": 10.0
-}
-```
-
-**字段说明：**
-- `domainId`: 大领域ID（可选，String类型，用于按大领域筛选）
-- `sportTypeId`: 运动类型ID（可选，Integer类型，用于按具体运动类型筛选，优先级高于domainId）
-- 如果同时提供 `domainId` 和 `sportTypeId`，会验证 `sportTypeId` 是否属于该 `domainId`
-- 如果只提供 `domainId`，会查询该领域下的所有运动类型的教练
-- 如果只提供 `sportTypeId`，会查询该运动类型的教练
-- 如果 `domainId` 和 `sportTypeId` 都为空，返回所有教练
-
-### 9.4 根据区域查询教练列表
-
-#### 接口地址
-```
-POST /coach/queryByArea
-```
-
-#### 请求方式
-Content-Type: `application/json`
-
-#### 请求体
-```json
-{
-  "head": {
-    "userLongitude": 121.473701,
-    "userLatitude": 31.230416
-  },
+  "areaId": 1,
   "area": "陆家嘴",
+  "phone": "138",
   "pageNum": 1,
   "pageSize": 10,
   "sortBy": "rating",
@@ -963,17 +912,13 @@ Content-Type: `application/json`
 }
 ```
 
-### 通用字段说明（教练列表查询）
-- `cityId`: 城市ID（可选，Integer类型）
-- `cityName`: 城市名称（可选）
-- `area`: 商圈（可选）
-- `pageNum`: 页码（默认1）
-- `pageSize`: 每页数量（默认10）
-- `sortBy`: 排序字段（rating, price, distance）
-- `sortOrder`: 排序方式（asc, desc）
-- `userLongitude`: 用户经度（用于距离计算）
-- `userLatitude`: 用户纬度（用于距离计算）
-- `maxDistance`: 最大距离（公里，可选）
+#### 请求字段说明（均为可选）
+- **城市**：`cityId`（Integer，关联 **qdd_city.id**；**0 或 -1 表示全国**，不按城市筛选；getAllFilterTypes 返回的“全国”为 cityId=0）、`cityName`（城市名称，仅当未传 cityId 时按名称筛选）；传具体 cityId（≥1）时按用户所在城市筛选教练
+- **运动类型**：`domainId`（String，大领域ID）、`sportTypeId`（Integer，具体运动类型ID，优先级高于 domainId）；可只传 domainId、只传 sportTypeId 或同时传（会校验 sportTypeId 是否属于 domainId）；都未传则不按类型筛选
+- **区域**：`areaId`（Long，关联 **qdd_area.id**，优先）、`area`（地区/商圈名称，当 areaId 为空时按教学区域 t_areas 模糊匹配）；二选一或同时传
+- **手机号**：`phone`（String，可选），按教练关联用户（qdd_user）的手机号**模糊匹配**，支持部分号码查询
+- **分页与排序**：`pageNum`（默认 1）、`pageSize`（默认 10）、`sortBy`（rating / price / distance）、`sortOrder`（asc / desc）
+- **位置**：`head.userLongitude`、`head.userLatitude`（用于距离计算）、`maxDistance`（最大距离，公里）
 
 ### 响应示例
 ```json
@@ -1547,7 +1492,7 @@ authorization: token字符串（必须）
 9. **Token验证**：所有需要认证的接口都必须提供有效的token
 10. **日期格式**：日期字段使用ISO格式（YYYY-MM-DD）或ISO日期时间格式（YYYY-MM-DDTHH:mm:ss）
 11. **JSON字段**：某些字段需要传递JSON字符串格式
-12. **坐标格式**：经纬度使用
+12. **坐标格式**：经纬度使用 WGS84 小数格式（如 121.473701）
 
 ## 11. 订单管理
 
@@ -2190,3 +2135,86 @@ Headers:
 - 如果用户是教练，`coachInfo` 字段会有值，`isCoach` 为 `true`
 - 如果用户不是教练，`coachInfo` 字段为 `null`，`isCoach` 为 `false`
 - `orderCount` 字段统计该用户的所有订单数量（不区分订单状态）
+
+---
+
+## 13. 获取所有筛选维度（getAllFilterTypes）
+
+### 接口地址
+```
+POST /domain/getAllFilterTypes
+```
+
+### 请求方式
+Content-Type: `application/json`
+
+### 请求体
+无需请求体（可不传 body，或传空对象 `{}`）。
+
+### 响应示例
+```json
+{
+  "success": true,
+  "data": {
+    "domains": [
+      {
+        "domainId": "1",
+        "domainName": "球类运动",
+        "sportTypes": [
+          { "id": 1, "name": "羽毛球", "icon": "https://example.com/icon1.png", "sort": 1 },
+          { "id": 2, "name": "乒乓球", "icon": "https://example.com/icon2.png", "sort": 2 }
+        ]
+      },
+      {
+        "domainId": "4",
+        "domainName": "瑜伽",
+        "sportTypes": [
+          { "id": 23, "name": "哈他瑜伽", "icon": "https://example.com/icon23.png", "sort": 1 }
+        ]
+      }
+    ],
+    "cities": [
+      { "cityId": 0, "cityName": "全国" },
+      { "cityId": 1, "cityName": "上海" },
+      { "cityId": 2, "cityName": "北京" }
+    ],
+    "areas": [
+      { "areaId": 1, "cityId": 1, "areaName": "陆家嘴" },
+      { "areaId": 2, "cityId": 1, "areaName": "浦东新区" }
+    ]
+  }
+}
+```
+
+### 响应字段说明
+
+**顶层字段：**
+- `domains`: 大领域列表（数组），按 domainId、sort 排序
+- `cities`: 城市列表（数组），来自 **qdd_city** 表，首项为「全国」（`cityId: 0`），其余按 sort、城市名称排序；用于筛选时，选「全国」则教练列表返回所有城市教练
+- `areas`: 地区/商圈列表（数组），来自 **qdd_area** 表，按 city_id、sort、地区名称排序，用于筛选等
+
+**domains 中每个元素（DomainInfo）：**
+- `domainId`: 大领域ID（String 类型）
+- `domainName`: 大领域名称（String 类型）
+- `sportTypes`: 该领域下的运动类型列表（数组）
+
+**sportTypes 中每个元素（SportTypeInfo）：**
+- `id`: 运动类型ID（Long 类型）
+- `name`: 运动类型名称（String 类型）
+- `icon`: 图标 URL（String 类型，可为 null）
+- `sort`: 排序值（Integer 类型，用于前端展示顺序）
+
+**cities 中每个元素（CityInfo）：**
+- `cityId`: 城市ID（Integer 类型）；**0 表示全国**，选全国时教练列表接口不按城市筛选；≥1 为具体城市（qdd_city.id）
+- `cityName`: 城市名称（String 类型）
+
+**areas 中每个元素（AreaInfo）：**
+- `areaId`: 地区/商圈ID（Long 类型，关联 qdd_area.id）
+- `cityId`: 所属城市ID（Integer 类型，关联 qdd_city.id）
+- `areaName`: 地区/商圈名称（String 类型）
+
+### 注意事项
+- 无需登录即可调用
+- 城市、地区数据来自 **qdd_city**、**qdd_area** 表；`domains` 按 `domainId`、运动类型 `sort` 升序；`cities` 首项为全国（cityId=0），其余按 sort、城市名称升序；`areas` 按 city_id、sort、地区名称升序
+- 教练列表/教练注册等接口中的 `domainId`、`sportTypeId` 与本接口返回的 `domainId`、`sportTypes[].id` 对应；`cityId` 对应 `cities[].cityId`；`areaId` 对应 `areas[].areaId`
+- `cities`、`areas` 可用于教练列表筛选：调用 `/coach/queryByAll` 时传 `cityId`（0 或 -1 为全国，返回所有城市教练）、`areaId` 或 `area` 等

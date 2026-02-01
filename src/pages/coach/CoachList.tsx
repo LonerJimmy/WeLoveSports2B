@@ -23,8 +23,8 @@ import {
 import { SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { getCoachByCity, getCoachByType, getCoachByArea, getCoachDetail, getCoachSchedules, setSchedule, updateScheduleStatus, deleteSchedule, getSportTypesForFilter } from '@/api'
-import type { CoachListItem, CoachDetailInfo, CoachSchedule } from '@/types'
+import { getCoachByAll, getCoachDetail, getCoachSchedules, setSchedule, updateScheduleStatus, deleteSchedule, getAllFilterTypes } from '@/api'
+import type { CoachListItem, CoachDetailInfo, CoachSchedule, CoachQueryParams, FilterTypeCity, FilterTypeArea } from '@/types'
 import { useUserStore } from '@/stores'
 import styles from './CoachList.module.scss'
 
@@ -41,11 +41,6 @@ interface CoachDetailApiResponse {
   }
 }
 
-// 运动类型接口
-interface SportTypeOption {
-  id: number
-  name: string
-}
 
 const { Option } = Select
 const { TabPane } = Tabs
@@ -101,10 +96,16 @@ const CoachList = () => {
   const [pageNum, setPageNum] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  // 筛选条件
+  // 搜索条件：仅手机号（queryByAll 传 phone 模糊匹配）
+  const [searchPhone, setSearchPhone] = useState('')
+
+  // 筛选条件：教练类型、城市、区域（数据来自 getAllFilterTypes，请求走 queryByAll）
   const [selectedSportTypeId, setSelectedSportTypeId] = useState<number | null>(null)
-  const [sportTypeOptions, setSportTypeOptions] = useState<SportTypeOption[]>([])
-  const [sportTypeMap, setSportTypeMap] = useState<Map<number, string>>(new Map())
+  const [filterCityId, setFilterCityId] = useState<number | null>(null)
+  const [filterAreaId, setFilterAreaId] = useState<number | null>(null)
+  const [sportTypeOptions, setSportTypeOptions] = useState<{ id: number; name: string }[]>([])
+  const [cityOptions, setCityOptions] = useState<FilterTypeCity[]>([])
+  const [areaOptions, setAreaOptions] = useState<FilterTypeArea[]>([])
 
   // 详情数据
   const [detailLoading, setDetailLoading] = useState(false)
@@ -118,69 +119,27 @@ const CoachList = () => {
   const [editingSchedule, setEditingSchedule] = useState<CoachSchedule | null>(null)
   const [form] = Form.useForm()
 
-  // 获取运动类型
-  const fetchSportTypes = async () => {
-    // 先尝试从 API 获取，如果返回的是对象数组则直接使用
+  // 获取所有筛选维度（教练类型、城市、区域）- 调用 getAllFilterTypes
+  const fetchFilterTypes = async () => {
     try {
-      const res = await getSportTypesForFilter()
-      if (res.data.success && res.data.data?.sportTypes) {
-        const types = res.data.data.sportTypes
-        // 检查是否是对象数组格式
-        if (types.length > 0 && typeof types[0] === 'object' && 'id' in types[0]) {
-          const options = types as { id: number; name: string }[]
-          setSportTypeOptions(options)
-          const map = new Map(options.map(opt => [opt.id, opt.name]))
-          setSportTypeMap(map)
-          return
-        }
+      const res = await getAllFilterTypes()
+      if (res.data.success && res.data.data) {
+        const { domains, cities, areas } = res.data.data
+        setCityOptions(cities ?? [])
+        setAreaOptions(areas ?? [])
+        const types = (domains ?? []).flatMap(d => d.sportTypes ?? []).map(t => ({ id: t.id, name: t.name }))
+        setSportTypeOptions(types)
       }
     } catch (error) {
-      console.error('Failed to fetch sport types from API:', error)
-    }
-
-    // 备用方案：从教练列表中提取运动类型
-    // 需要先获取一次所有教练来收集运动类型
-    try {
-      const params: any = {
-        pageNum: 1,
-        pageSize: 100, // 获取更多数据以收集所有运动类型
-        head: {
-          userLongitude: 121.473701,
-          userLatitude: 31.230416,
-        },
-      }
-      const res = await getCoachByType(params)
-      if (res.data.success && res.data.data?.coachList) {
-        const coachList = res.data.data.coachList
-        // 从教练列表中提取所有运动类型
-        const typeMap = new Map<number, string>()
-
-        coachList.forEach(coach => {
-          coach.sportTypeIds?.forEach((typeId) => {
-            if (!typeMap.has(typeId)) {
-              // 尝试从 coachTypeName 或使用索引作为名称
-              const typeName = coach.coachTypeName || `运动类型${typeId}`
-              typeMap.set(typeId, typeName)
-            }
-          })
-        })
-
-        const options = Array.from(typeMap.entries()).map(([id, name]) => ({ id, name }))
-          .sort((a, b) => a.id - b.id)
-
-        setSportTypeOptions(options)
-        setSportTypeMap(typeMap)
-      }
-    } catch (error) {
-      console.error('Failed to fetch sport types from coach list:', error)
+      console.error('Failed to fetch filter types:', error)
     }
   }
 
-  // 获取教练列表
+  // 获取教练列表：统一走 queryByAll，支持城市、运动类型、区域组合筛选（AND）
   const fetchCoaches = async () => {
     try {
       setListLoading(true)
-      const params: any = {
+      const params: CoachQueryParams = {
         pageNum,
         pageSize,
         head: {
@@ -188,16 +147,24 @@ const CoachList = () => {
           userLatitude: 31.230416,
         },
       }
-
-      // 如果选择了运动类型，添加到查询参数
-      if (selectedSportTypeId) {
+      if (searchPhone.trim()) {
+        params.phone = searchPhone.trim()
+      }
+      if (selectedSportTypeId != null) {
         params.sportTypeId = selectedSportTypeId
       }
+      if (filterCityId != null) {
+        params.cityId = filterCityId
+      }
+      if (filterAreaId != null) {
+        params.areaId = filterAreaId
+      }
 
-      const res = await getCoachByType(params)
+      const res = await getCoachByAll(params)
       if (res.data.success && res.data.data) {
-        setCoaches(res.data.data.coachList || [])
-        setTotal(res.data.data.total || 0)
+        const data = res.data.data as { coachList?: CoachListItem[]; records?: CoachListItem[]; total?: number }
+        setCoaches(data.records ?? data.coachList ?? [])
+        setTotal(data.total ?? 0)
       }
     } catch (error) {
       console.error('Failed to fetch coaches:', error)
@@ -260,7 +227,7 @@ const CoachList = () => {
   }, [pageNum, pageSize, selectedSportTypeId])
 
   useEffect(() => {
-    fetchSportTypes()
+    fetchFilterTypes()
   }, [])
 
   useEffect(() => {
@@ -279,6 +246,19 @@ const CoachList = () => {
     setPageNum(1)
     fetchCoaches()
   }
+
+  const handleResetFilters = () => {
+    setSearchPhone('')
+    setSelectedSportTypeId(null)
+    setFilterCityId(null)
+    setFilterAreaId(null)
+    setPageNum(1)
+  }
+
+  // 区域选项：选中城市时只展示该城市下的区域
+  const filteredAreaOptions = filterCityId != null
+    ? areaOptions.filter(a => a.cityId === filterCityId)
+    : areaOptions
 
   const handleViewDetail = (coach: CoachListItem) => {
     setSelectedCoachId(coach.coachId)
@@ -519,29 +499,76 @@ const CoachList = () => {
               </Button>
             </div>
 
-            <div className={styles.filters}>
-              <Space size="middle">
-                <Select
-                  placeholder="请选择运动类型"
-                  allowClear
-                  value={selectedSportTypeId}
-                  onChange={(value: number | null) => {
-                    setSelectedSportTypeId(value)
-                    setPageNum(1)
-                  }}
-                  style={{ width: 200 }}
-                >
-                  {sportTypeOptions.map((option) => (
-                    <Option key={option.id} value={option.id}>
-                      {option.name}
-                    </Option>
-                  ))}
-                </Select>
+            {/* 搜索模块：仅手机号（queryByAll 传 phone 模糊匹配） */}
+            <div className={styles.searchSection}>
+              <span className={styles.label}>搜索：</span>
+              <Input
+                placeholder="请输入手机号"
+                value={searchPhone}
+                onChange={(e) => setSearchPhone(e.target.value)}
+                onPressEnter={handleSearch}
+                style={{ width: 200 }}
+                allowClear
+              />
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                搜索
+              </Button>
+            </div>
 
-                <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-                  搜索
-                </Button>
-              </Space>
+            {/* 筛选模块：教练类型、城市、区域（选项来自 getAllFilterTypes） */}
+            <div className={styles.filters}>
+              <span className={styles.label}>筛选：</span>
+              <Select
+                placeholder="教练类型"
+                allowClear
+                value={selectedSportTypeId}
+                onChange={(value: number | null) => {
+                  setSelectedSportTypeId(value)
+                  setPageNum(1)
+                }}
+                style={{ width: 160 }}
+              >
+                {sportTypeOptions.map((option) => (
+                  <Option key={option.id} value={option.id}>
+                    {option.name}
+                  </Option>
+                ))}
+              </Select>
+              <Select
+                placeholder="城市"
+                allowClear
+                value={filterCityId}
+                onChange={(value: number | null) => {
+                  setFilterCityId(value)
+                  setFilterAreaId(null)
+                  setPageNum(1)
+                }}
+                style={{ width: 140 }}
+              >
+                {cityOptions.map((c) => (
+                  <Option key={c.cityId} value={c.cityId}>
+                    {c.cityName}
+                  </Option>
+                ))}
+              </Select>
+              <Select
+                placeholder="区域/商圈"
+                allowClear
+                value={filterAreaId ?? undefined}
+                onChange={(value: number | undefined) => {
+                  setFilterAreaId(value ?? null)
+                  setPageNum(1)
+                }}
+                style={{ width: 140 }}
+              >
+                {filteredAreaOptions.map((a) => (
+                  <Option key={a.areaId} value={a.areaId}>
+                    {a.areaName}
+                  </Option>
+                ))}
+              </Select>
+              <Button onClick={handleSearch}>应用筛选</Button>
+              <Button onClick={handleResetFilters}>重置</Button>
             </div>
 
             <Table

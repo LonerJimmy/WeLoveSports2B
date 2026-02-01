@@ -15,10 +15,34 @@
   }
 }
 
+.searchSection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+
+  .label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+}
+
 .filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-color-split);
+  flex-wrap: wrap;
+
+  .label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
 }
 
 .coachType {

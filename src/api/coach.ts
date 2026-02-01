@@ -46,6 +46,11 @@ export const getCoachByArea = (params: CoachQueryParams): Promise<AxiosResponse<
   return request.post('/coach/queryByArea', params)
 }
 
+/** 教练列表统一查询（queryByAll）：支持城市、运动类型、区域组合筛选，多条件 AND */
+export const getCoachByAll = (params: CoachQueryParams): Promise<AxiosResponse<ApiResponse<CoachListPaginationResponse<CoachListItem>>>> => {
+  return request.post('/coach/queryByAll', params)
+}
+
 // 设置预约时间
 export const setSchedule = (data: SetScheduleRequest): Promise<AxiosResponse<ApiResponse<CoachSchedule[]>>> => {
   return request.post('/coach/setSchedule', data)

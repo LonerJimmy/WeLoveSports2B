@@ -18,6 +18,37 @@ export interface SportTypesResponse {
   domains: SportDomain[]
 }
 
+// 获取所有筛选维度接口返回
+export interface FilterTypeSportType {
+  id: number
+  name: string
+  icon?: string
+  sort?: number
+}
+
+export interface FilterTypeDomain {
+  domainId: string
+  domainName: string
+  sportTypes: FilterTypeSportType[]
+}
+
+export interface FilterTypeCity {
+  cityId: number
+  cityName: string
+}
+
+export interface FilterTypeArea {
+  areaId: number
+  cityId: number
+  areaName: string
+}
+
+export interface GetAllFilterTypesResponse {
+  domains: FilterTypeDomain[]
+  cities: FilterTypeCity[]
+  areas: FilterTypeArea[]
+}
+
 // 教练基础信息
 export interface CoachBasicInfo {
   coachId: string
@@ -169,7 +200,7 @@ export interface ScheduleItem {
   remark?: string
 }
 
-// 教练查询参数
+// 教练查询参数（与 queryByAll 一致）
 export interface CoachQueryParams {
   head?: {
     clientId?: string
@@ -180,8 +211,12 @@ export interface CoachQueryParams {
   cityId?: number
   cityName?: string
   area?: string
+  /** 区域/商圈ID（Long，关联 qdd_area.id，queryByAll 优先使用） */
+  areaId?: number
   domainId?: string
   sportTypeId?: number
+  /** 手机号（queryByAll 按教练关联用户手机号模糊匹配） */
+  phone?: string
   pageNum?: number
   pageSize?: number
   sortBy?: string
