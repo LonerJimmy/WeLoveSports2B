@@ -10,21 +10,18 @@ const request = axios.create({
   },
 })
 
-// 请求拦截器
+// 请求拦截器：token 作为登录标记，放入每个请求的 head.authorization
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // 从 localStorage 获取 token
     const token = localStorage.getItem('token')
     if (token && config.headers) {
-      // 添加到请求头（API 文档要求的格式）
       config.headers.authorization = token
-
-      // 如果请求体包含 head 对象，也添加到 head 中
-      if (config.data && typeof config.data === 'object' && 'head' in config.data) {
-        config.data.head = {
-          ...config.data.head,
-          authorization: token,
-        }
+    }
+    // 有 body 的请求统一在 body.head 中带上 authorization，供后端校验登录态
+    if (token && config.data && typeof config.data === 'object') {
+      config.data.head = {
+        ...(config.data.head || {}),
+        authorization: token,
       }
     }
     return config

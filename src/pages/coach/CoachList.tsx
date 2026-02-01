@@ -23,7 +23,7 @@ import {
 import { SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { getCoachByAll, getCoachDetail, getCoachSchedules, setSchedule, updateScheduleStatus, deleteSchedule, getAllFilterTypes } from '@/api'
+import { getCoachByAll, getCoachDetail, getCoachSchedules, setSchedule, updateScheduleStatus, deleteSchedule, getAllFilterTypes, verifyCoach } from '@/api'
 import type { CoachListItem, CoachDetailInfo, CoachSchedule, CoachQueryParams, FilterTypeCity, FilterTypeArea } from '@/types'
 import { useUserStore } from '@/stores'
 import styles from './CoachList.module.scss'
@@ -60,30 +60,20 @@ const CoachList = () => {
 
   // 从 URL 参数获取状态，如果没有则使用默认值
   const activeTab = searchParams.get('tab') || 'list'
-  const selectedCoachId = searchParams.get('coachId') || null
 
-  // 设置状态到 URL
+  // 教练详情弹框：弹层内展示详情，不再使用 tab
+  const [detailModalVisible, setDetailModalVisible] = useState(false)
+  const [detailCoachId, setDetailCoachId] = useState<string | null>(null)
+  const [detailInnerTabKey, setDetailInnerTabKey] = useState('certifications')
+
+  const currentDetailCoachId = detailModalVisible ? detailCoachId : null
+
   const setActiveTab = (tab: string) => {
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev)
       newParams.set('tab', tab)
-      // 只有切换到列表 tab 时才清除 coachId，其他情况保留
-      if (tab === 'list') {
+      if (tab === 'list' || tab === 'pending') {
         newParams.delete('coachId')
-      }
-      return newParams
-    })
-  }
-
-  const setSelectedCoachId = (coachId: string | null) => {
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev)
-      if (coachId) {
-        newParams.set('coachId', coachId)
-        newParams.set('tab', 'detail')
-      } else {
-        newParams.delete('coachId')
-        newParams.set('tab', 'list')
       }
       return newParams
     })
@@ -130,15 +120,17 @@ const CoachList = () => {
         const types = (domains ?? []).flatMap(d => d.sportTypes ?? []).map(t => ({ id: t.id, name: t.name }))
         setSportTypeOptions(types)
       }
-    } catch (error) {
-      console.error('Failed to fetch filter types:', error)
+    } catch (error: unknown) {
+      console.error('[CoachList] fetchFilterTypes 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
     }
   }
 
   // 获取教练列表：统一走 queryByAll，支持城市、运动类型、区域组合筛选（AND）
-  const fetchCoaches = async () => {
+  // options.tab 用于审核通过/拒绝后强制刷新待审核列表，避免依赖 URL 未更新时的 activeTab
+  const fetchCoaches = async (options?: { tab?: 'list' | 'pending' }) => {
     try {
       setListLoading(true)
+      const effectiveTab = options?.tab ?? activeTab
       const params: CoachQueryParams = {
         pageNum,
         pageSize,
@@ -147,17 +139,21 @@ const CoachList = () => {
           userLatitude: 31.230416,
         },
       }
-      if (searchPhone.trim()) {
-        params.phone = searchPhone.trim()
-      }
-      if (selectedSportTypeId != null) {
-        params.sportTypeId = selectedSportTypeId
-      }
-      if (filterCityId != null) {
-        params.cityId = filterCityId
-      }
-      if (filterAreaId != null) {
-        params.areaId = filterAreaId
+      if (effectiveTab === 'pending') {
+        params.isVerified = 0
+      } else {
+        if (searchPhone.trim()) {
+          params.phone = searchPhone.trim()
+        }
+        if (selectedSportTypeId != null) {
+          params.sportTypeId = selectedSportTypeId
+        }
+        if (filterCityId != null) {
+          params.cityId = filterCityId
+        }
+        if (filterAreaId != null) {
+          params.areaId = filterAreaId
+        }
       }
 
       const res = await getCoachByAll(params)
@@ -165,9 +161,11 @@ const CoachList = () => {
         const data = res.data.data as { coachList?: CoachListItem[]; records?: CoachListItem[]; total?: number }
         setCoaches(data.records ?? data.coachList ?? [])
         setTotal(data.total ?? 0)
+      } else {
+        console.error('[CoachList] fetchCoaches 请求失败（业务）:', res.data)
       }
-    } catch (error) {
-      console.error('Failed to fetch coaches:', error)
+    } catch (error: unknown) {
+      console.error('[CoachList] fetchCoaches 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
     } finally {
       setListLoading(false)
     }
@@ -191,56 +189,70 @@ const CoachList = () => {
           experiences: apiData.professional?.experiences,
         }
         setCoachDetail(transformedData)
+      } else {
+        console.error('[CoachList] fetchCoachDetail 请求失败（业务）:', res.data)
       }
-    } catch (error) {
-      console.error('Failed to fetch coach detail:', error)
+    } catch (error: unknown) {
+      console.error('[CoachList] fetchCoachDetail 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
     } finally {
       setDetailLoading(false)
     }
   }
 
-  // 获取预约时间
-  const fetchSchedules = async () => {
-    if (!selectedCoachId) return
+  // 获取预约时间（支持传入 coachId，用于详情弹层内；initCoachSchedule 需校验登录态）
+  const fetchSchedules = async (coachId?: string | null) => {
+    const id = coachId ?? detailCoachId
+    if (!id) return
+
+    const token = localStorage.getItem('token')
+    if (!token) {
+      message.warning('请先登录后再查看预约时间')
+      return
+    }
 
     try {
       setScheduleLoading(true)
-      const startDate = dayjs().format('YYYY-MM-DD')
-      const endDate = dayjs().add(3, 'month').format('YYYY-MM-DD')
+      const now = new Date()
+      const startDate = dayjs(now).format('YYYY-MM-DD')
+      const endDate = dayjs(new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())).format('YYYY-MM-DD')
 
-      const res = await getCoachSchedules(selectedCoachId, startDate, endDate)
+      const res = await getCoachSchedules(id, startDate, endDate)
       if (res.data.success && res.data.data) {
         setSchedules(res.data.data.list || [])
         if (res.data.data.hourlyRate) {
           setHourlyRate(res.data.data.hourlyRate)
         }
+      } else {
+        console.error('[CoachList] fetchSchedules 请求失败（业务）:', res.data)
       }
-    } catch (error) {
-      console.error('Failed to fetch schedules:', error)
+    } catch (error: unknown) {
+      console.error('[CoachList] fetchSchedules 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
     } finally {
       setScheduleLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchCoaches()
-  }, [pageNum, pageSize, selectedSportTypeId])
+    if (activeTab === 'list' || activeTab === 'pending') {
+      fetchCoaches()
+    }
+  }, [activeTab, pageNum, pageSize, selectedSportTypeId, filterCityId, filterAreaId, searchPhone])
 
   useEffect(() => {
     fetchFilterTypes()
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'detail' && selectedCoachId) {
-      fetchCoachDetail(selectedCoachId)
+    if (detailModalVisible && detailCoachId) {
+      fetchCoachDetail(detailCoachId)
     }
-  }, [activeTab, selectedCoachId])
+  }, [detailModalVisible, detailCoachId])
 
   useEffect(() => {
-    if (activeTab === 'schedule' && selectedCoachId) {
-      fetchSchedules()
+    if (detailModalVisible && detailInnerTabKey === 'schedules' && detailCoachId) {
+      fetchSchedules(detailCoachId)
     }
-  }, [activeTab, selectedCoachId])
+  }, [detailModalVisible, detailInnerTabKey, detailCoachId])
 
   const handleSearch = () => {
     setPageNum(1)
@@ -261,8 +273,71 @@ const CoachList = () => {
     : areaOptions
 
   const handleViewDetail = (coach: CoachListItem) => {
-    setSelectedCoachId(coach.coachId)
-    // setSelectedCoachId 已经会自动设置 tab 为 'detail'，不需要再调用 setActiveTab
+    setDetailCoachId(coach.coachId)
+    setDetailModalVisible(true)
+    setDetailInnerTabKey('certifications')
+  }
+
+  const handleCloseDetailModal = () => {
+    setDetailModalVisible(false)
+    setDetailCoachId(null)
+    setCoachDetail(null)
+  }
+
+  const [auditingCoachId, setAuditingCoachId] = useState<string | null>(null)
+
+  /** 教练审核通过：再次确认弹框 → 确认后调用 verify 接口，传 isVerified=1（已认证），并刷新当前页（保持待审核 tab） */
+  const handleApprove = (coach: CoachListItem) => {
+    Modal.confirm({
+      title: '确认通过',
+      content: `确定通过教练「${coach.username}」的认证申请？`,
+      onOk: async () => {
+        try {
+          setAuditingCoachId(coach.coachId)
+          const res = await verifyCoach(coach.coachId, 1, 1)
+          if (res.data.success) {
+            message.success('审核通过')
+            setActiveTab('pending')
+            fetchCoaches({ tab: 'pending' })
+          } else {
+            console.error('[CoachList] verifyCoach 审核通过 请求失败（业务）:', res.data)
+            message.error(res.data.errorMsg ?? '操作失败')
+          }
+        } catch (error: unknown) {
+          console.error('[CoachList] verifyCoach 审核通过 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
+          message.error('操作失败')
+        } finally {
+          setAuditingCoachId(null)
+        }
+      },
+    })
+  }
+
+  /** 教练审核拒绝：再次确认弹框 → 确认后调用 verify 接口，传 isVerified=0（未认证），并刷新当前页（保持待审核 tab） */
+  const handleReject = (coach: CoachListItem) => {
+    Modal.confirm({
+      title: '确认拒绝',
+      content: `确定拒绝教练「${coach.username}」的认证申请？`,
+      onOk: async () => {
+        try {
+          setAuditingCoachId(coach.coachId)
+          const res = await verifyCoach(coach.coachId, 0, 0)
+          if (res.data.success) {
+            message.success('已拒绝')
+            setActiveTab('pending')
+            fetchCoaches({ tab: 'pending' })
+          } else {
+            console.error('[CoachList] verifyCoach 审核拒绝 请求失败（业务）:', res.data)
+            message.error(res.data.errorMsg ?? '操作失败')
+          }
+        } catch (error: unknown) {
+          console.error('[CoachList] verifyCoach 审核拒绝 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
+          message.error('操作失败')
+        } finally {
+          setAuditingCoachId(null)
+        }
+      },
+    })
   }
 
   const handleAddSchedule = () => {
@@ -300,11 +375,13 @@ const CoachList = () => {
       content: '确定要删除这个预约时间段吗？',
       onOk: async () => {
         try {
-          await deleteSchedule(schedule.id, selectedCoachId!)
+          const coachId = currentDetailCoachId
+          if (!coachId) return
+          await deleteSchedule(schedule.id, coachId)
           message.success('删除成功')
-          fetchSchedules()
-        } catch (error) {
-          console.error('Failed to delete schedule:', error)
+          fetchSchedules(coachId)
+        } catch (error: unknown) {
+          console.error('[CoachList] deleteSchedule 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
         }
       },
     })
@@ -312,6 +389,8 @@ const CoachList = () => {
 
   const handleModalOk = async () => {
     try {
+      const coachId = currentDetailCoachId
+      if (!coachId) return
       const values = await form.validateFields()
 
       if (editingSchedule) {
@@ -321,7 +400,7 @@ const CoachList = () => {
         message.success('更新成功')
       } else {
         await setSchedule({
-          coachId: selectedCoachId!,
+          coachId,
           head: {
             userLongitude: 121.473701,
             userLatitude: 31.230416,
@@ -345,9 +424,9 @@ const CoachList = () => {
       }
 
       setModalVisible(false)
-      fetchSchedules()
-    } catch (error) {
-      console.error('Failed to save schedule:', error)
+      fetchSchedules(coachId)
+    } catch (error: unknown) {
+      console.error('[CoachList] setSchedule/updateScheduleStatus 请求失败:', error, (error as { response?: { data?: unknown } })?.response?.data)
     }
   }
 
@@ -423,6 +502,39 @@ const CoachList = () => {
     },
   ]
 
+  const pendingListColumns: ColumnsType<CoachListItem> = [
+    ...listColumns.slice(0, -1),
+    {
+      title: '操作',
+      key: 'action',
+      render: (_, record) => (
+        <Space>
+          <Button type="link" onClick={() => handleViewDetail(record)}>
+            查看详情
+          </Button>
+          <Button
+            type="link"
+            onClick={() => handleApprove(record)}
+            loading={auditingCoachId === record.coachId}
+            disabled={!!auditingCoachId}
+          >
+            通过
+          </Button>
+          <Button
+            type="link"
+            danger
+            onClick={() => handleReject(record)}
+            loading={auditingCoachId === record.coachId}
+            disabled={!!auditingCoachId}
+          >
+            拒绝
+          </Button>
+        </Space>
+      ),
+      width: 220,
+    },
+  ]
+
   const scheduleColumns: ColumnsType<CoachSchedule> = [
     {
       title: '日期',
@@ -490,7 +602,13 @@ const CoachList = () => {
   return (
     <div className={styles.coachList}>
       <Card>
-        <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => {
+            if (key === 'pending') setPageNum(1)
+            setActiveTab(key)
+          }}
+        >
           <TabPane tab="教练列表" key="list">
             <div className={styles.header}>
               <h2>教练列表</h2>
@@ -590,163 +708,195 @@ const CoachList = () => {
             />
           </TabPane>
 
-          <TabPane tab="教练详情" key="detail" disabled={!selectedCoachId}>
-            {detailLoading ? (
-              <div>加载中...</div>
-            ) : coachDetail ? (
-              <>
-                <Card className={styles.basicInfo}>
-                  <Row gutter={24}>
-                    <Col span={6}>
-                      <Avatar src={coachDetail.avatar} size={120} icon={<EditOutlined />} />
-                    </Col>
-                    <Col span={18}>
-                      <div className={styles.nameSection}>
-                        <h2>{coachDetail.username}</h2>
-                        <div className={styles.tags}>
-                          <Tag color="blue">{coachDetail.gender === 0 ? '男' : '女'}</Tag>
-                          <Tag color="green">{coachDetail.cityName}</Tag>
-                        </div>
-                        <div className={styles.rating}>
-                          <Rate disabled defaultValue={coachDetail.rating} />
-                          <span className={styles.reviewCount}>({coachDetail.totalReviews} 条评价)</span>
-                        </div>
-                      </div>
-                    </Col>
-                  </Row>
-
-                  <Descriptions column={2} bordered className={styles.descriptions}>
-                    <Descriptions.Item label="教练ID">{coachDetail.coachId}</Descriptions.Item>
-                    <Descriptions.Item label="性别">{coachDetail.gender === 0 ? '男' : '女'}</Descriptions.Item>
-                    <Descriptions.Item label="教学经验">{coachDetail.experienceYears} 年</Descriptions.Item>
-                    <Descriptions.Item label="时薪">¥{coachDetail.hourlyRate}/小时</Descriptions.Item>
-                    <Descriptions.Item label="身高">{coachDetail.height} cm</Descriptions.Item>
-                    <Descriptions.Item label="体重">{coachDetail.weight} kg</Descriptions.Item>
-                    <Descriptions.Item label="城市">{coachDetail.cityName}</Descriptions.Item>
-                    <Descriptions.Item label="区域">{coachDetail.coachArea || '暂无'}</Descriptions.Item>
-                    <Descriptions.Item label="地址" span={2}>
-                      {coachDetail.coachAddress || '暂无'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="教学区域" span={2}>
-                      {coachDetail.teachingAreas?.join('、') || '暂无'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="个人介绍" span={2}>
-                      {coachDetail.introduction || '暂无介绍'}
-                    </Descriptions.Item>
-                  </Descriptions>
-                </Card>
-
-                <Card>
-                  <Tabs defaultActiveKey="certifications">
-                    <TabPane tab="资格证书" key="certifications">
-                      {coachDetail.certifications && coachDetail.certifications.length > 0 ? (
-                        <Descriptions column={1} bordered>
-                          {coachDetail.certifications.map((cert, index) => (
-                            <Descriptions.Item key={index} label={cert.certificationName}>
-                              <div>
-                                <p>发证机构：{cert.issuingOrganization}</p>
-                                <p>证书编号：{cert.certificationNumber || '暂无'}</p>
-                                <p>发证日期：{cert.issueDate || '暂无'}</p>
-                                <p>过期日期：{cert.expirationDate || '暂无'}</p>
-                              </div>
-                            </Descriptions.Item>
-                          ))}
-                        </Descriptions>
-                      ) : (
-                        <div>暂无资格证书</div>
-                      )}
-                    </TabPane>
-
-                    <TabPane tab="荣誉奖项" key="awards">
-                      {coachDetail.awards && coachDetail.awards.length > 0 ? (
-                        <Descriptions column={1} bordered>
-                          {coachDetail.awards.map((award, index) => (
-                            <Descriptions.Item key={index} label={award.awardName}>
-                              <div>
-                                <p>颁奖机构：{award.awardingOrganization}</p>
-                                <p>获奖日期：{award.awardDate}</p>
-                                <p>奖项描述：{award.description || '暂无'}</p>
-                              </div>
-                            </Descriptions.Item>
-                          ))}
-                        </Descriptions>
-                      ) : (
-                        <div>暂无荣誉奖项</div>
-                      )}
-                    </TabPane>
-
-                    <TabPane tab="教育背景" key="educations">
-                      {coachDetail.educations && coachDetail.educations.length > 0 ? (
-                        <Descriptions column={1} bordered>
-                          {coachDetail.educations.map((edu, index) => (
-                            <Descriptions.Item key={index} label={edu.schoolName}>
-                              <div>
-                                <p>专业：{edu.fieldOfStudy || '暂无'}</p>
-                                <p>学历：{edu.degreeType || '暂无'}</p>
-                                <p>
-                                  时间：{edu.startDate} ~ {edu.endDate || '至今'}
-                                </p>
-                                <p>是否毕业：{edu.isGraduated ? '是' : '否'}</p>
-                              </div>
-                            </Descriptions.Item>
-                          ))}
-                        </Descriptions>
-                      ) : (
-                        <div>暂无教育背景</div>
-                      )}
-                    </TabPane>
-
-                    <TabPane tab="工作经历" key="experiences">
-                      {coachDetail.experiences && coachDetail.experiences.length > 0 ? (
-                        <Descriptions column={1} bordered>
-                          {coachDetail.experiences.map((exp, index) => (
-                            <Descriptions.Item key={index} label={exp.organizationName}>
-                              <div>
-                                <p>职位：{exp.position}</p>
-                                <p>
-                                  时间：{exp.startDate} ~ {exp.endDate || '至今'}
-                                </p>
-                                <p>工作描述：{exp.description || '暂无'}</p>
-                              </div>
-                            </Descriptions.Item>
-                          ))}
-                        </Descriptions>
-                      ) : (
-                        <div>暂无工作经历</div>
-                      )}
-                    </TabPane>
-
-                    <TabPane tab="预约管理" key="schedules">
-                      <div className={styles.header}>
-                        <div>
-                          <h3>预约时间管理</h3>
-                          <p>当前时薪：¥{hourlyRate}/小时</p>
-                        </div>
-                        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddSchedule}>
-                          添加时间段
-                        </Button>
-                      </div>
-                      <Table
-                        columns={scheduleColumns}
-                        dataSource={schedules}
-                        rowKey="id"
-                        loading={scheduleLoading}
-                        pagination={{
-                          pageSize: 20,
-                          showSizeChanger: true,
-                          showTotal: (t) => `共 ${t} 条`,
-                        }}
-                      />
-                    </TabPane>
-                  </Tabs>
-                </Card>
-              </>
-            ) : (
-              <div>请先选择一个教练查看详情</div>
-            )}
+          <TabPane tab="待审核教练" key="pending">
+            <div className={styles.header}>
+              <h2>待审核教练</h2>
+            </div>
+            <Table
+              columns={pendingListColumns}
+              dataSource={coaches}
+              rowKey="coachId"
+              loading={listLoading}
+              pagination={{
+                current: pageNum,
+                pageSize,
+                total,
+                showSizeChanger: true,
+                showTotal: (t) => `共 ${t} 条`,
+                onChange: (page, size) => {
+                  setPageNum(page)
+                  setPageSize(size)
+                },
+              }}
+            />
           </TabPane>
         </Tabs>
       </Card>
+
+      {/* 教练详情弹框浮层：禁止点击遮罩关闭，避免点「预约管理」等 tab 时误触遮罩导致关闭/跳转 */}
+      <Modal
+        title={coachDetail ? `教练详情 - ${coachDetail.username}` : '教练详情'}
+        open={detailModalVisible}
+        onCancel={handleCloseDetailModal}
+        footer={null}
+        width={900}
+        destroyOnClose
+        maskClosable={false}
+      >
+        <div onClick={(e) => e.stopPropagation()} role="presentation">
+        {detailLoading ? (
+          <div style={{ padding: 48, textAlign: 'center' }}>加载中...</div>
+        ) : coachDetail ? (
+          <>
+            <Card className={styles.basicInfo}>
+              <Row gutter={24}>
+                <Col span={6}>
+                  <Avatar src={coachDetail.avatar} size={120} icon={<EditOutlined />} />
+                </Col>
+                <Col span={18}>
+                  <div className={styles.nameSection}>
+                    <h2>{coachDetail.username}</h2>
+                    <div className={styles.tags}>
+                      <Tag color="blue">{coachDetail.gender === 0 ? '男' : '女'}</Tag>
+                      <Tag color="green">{coachDetail.cityName}</Tag>
+                    </div>
+                    <div className={styles.rating}>
+                      <Rate disabled defaultValue={coachDetail.rating} />
+                      <span className={styles.reviewCount}>({coachDetail.totalReviews} 条评价)</span>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
+              <Descriptions column={2} bordered className={styles.descriptions}>
+                <Descriptions.Item label="教练ID">{coachDetail.coachId}</Descriptions.Item>
+                <Descriptions.Item label="性别">{coachDetail.gender === 0 ? '男' : '女'}</Descriptions.Item>
+                <Descriptions.Item label="教学经验">{coachDetail.experienceYears} 年</Descriptions.Item>
+                <Descriptions.Item label="时薪">¥{coachDetail.hourlyRate}/小时</Descriptions.Item>
+                <Descriptions.Item label="身高">{coachDetail.height} cm</Descriptions.Item>
+                <Descriptions.Item label="体重">{coachDetail.weight} kg</Descriptions.Item>
+                <Descriptions.Item label="城市">{coachDetail.cityName}</Descriptions.Item>
+                <Descriptions.Item label="区域">{coachDetail.coachArea || '暂无'}</Descriptions.Item>
+                <Descriptions.Item label="地址" span={2}>
+                  {coachDetail.coachAddress || '暂无'}
+                </Descriptions.Item>
+                <Descriptions.Item label="教学区域" span={2}>
+                  {coachDetail.teachingAreas?.join('、') || '暂无'}
+                </Descriptions.Item>
+                <Descriptions.Item label="个人介绍" span={2}>
+                  {coachDetail.introduction || '暂无介绍'}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Card>
+              <Tabs activeKey={detailInnerTabKey} onChange={setDetailInnerTabKey}>
+                <TabPane tab="资格证书" key="certifications">
+                  {coachDetail.certifications && coachDetail.certifications.length > 0 ? (
+                    <Descriptions column={1} bordered>
+                      {coachDetail.certifications.map((cert, index) => (
+                        <Descriptions.Item key={index} label={cert.certificationName}>
+                          <div>
+                            <p>发证机构：{cert.issuingOrganization}</p>
+                            <p>证书编号：{cert.certificationNumber || '暂无'}</p>
+                            <p>发证日期：{cert.issueDate || '暂无'}</p>
+                            <p>过期日期：{cert.expirationDate || '暂无'}</p>
+                          </div>
+                        </Descriptions.Item>
+                      ))}
+                    </Descriptions>
+                  ) : (
+                    <div>暂无资格证书</div>
+                  )}
+                </TabPane>
+
+                <TabPane tab="荣誉奖项" key="awards">
+                  {coachDetail.awards && coachDetail.awards.length > 0 ? (
+                    <Descriptions column={1} bordered>
+                      {coachDetail.awards.map((award, index) => (
+                        <Descriptions.Item key={index} label={award.awardName}>
+                          <div>
+                            <p>颁奖机构：{award.awardingOrganization}</p>
+                            <p>获奖日期：{award.awardDate}</p>
+                            <p>奖项描述：{award.description || '暂无'}</p>
+                          </div>
+                        </Descriptions.Item>
+                      ))}
+                    </Descriptions>
+                  ) : (
+                    <div>暂无荣誉奖项</div>
+                  )}
+                </TabPane>
+
+                <TabPane tab="教育背景" key="educations">
+                  {coachDetail.educations && coachDetail.educations.length > 0 ? (
+                    <Descriptions column={1} bordered>
+                      {coachDetail.educations.map((edu, index) => (
+                        <Descriptions.Item key={index} label={edu.schoolName}>
+                          <div>
+                            <p>专业：{edu.fieldOfStudy || '暂无'}</p>
+                            <p>学历：{edu.degreeType || '暂无'}</p>
+                            <p>
+                              时间：{edu.startDate} ~ {edu.endDate || '至今'}
+                            </p>
+                            <p>是否毕业：{edu.isGraduated ? '是' : '否'}</p>
+                          </div>
+                        </Descriptions.Item>
+                      ))}
+                    </Descriptions>
+                  ) : (
+                    <div>暂无教育背景</div>
+                  )}
+                </TabPane>
+
+                <TabPane tab="工作经历" key="experiences">
+                  {coachDetail.experiences && coachDetail.experiences.length > 0 ? (
+                    <Descriptions column={1} bordered>
+                      {coachDetail.experiences.map((exp, index) => (
+                        <Descriptions.Item key={index} label={exp.organizationName}>
+                          <div>
+                            <p>职位：{exp.position}</p>
+                            <p>
+                              时间：{exp.startDate} ~ {exp.endDate || '至今'}
+                            </p>
+                            <p>工作描述：{exp.description || '暂无'}</p>
+                          </div>
+                        </Descriptions.Item>
+                      ))}
+                    </Descriptions>
+                  ) : (
+                    <div>暂无工作经历</div>
+                  )}
+                </TabPane>
+
+                <TabPane tab="预约管理" key="schedules">
+                  <div className={styles.header}>
+                    <div>
+                      <h3>预约时间管理</h3>
+                      <p>当前时薪：¥{hourlyRate}/小时</p>
+                    </div>
+                    <Button type="primary" htmlType="button" icon={<PlusOutlined />} onClick={handleAddSchedule}>
+                      添加时间段
+                    </Button>
+                  </div>
+                  <Table
+                    columns={scheduleColumns}
+                    dataSource={schedules}
+                    rowKey="id"
+                    loading={scheduleLoading}
+                    pagination={{
+                      pageSize: 20,
+                      showSizeChanger: true,
+                      showTotal: (t) => `共 ${t} 条`,
+                    }}
+                  />
+                </TabPane>
+              </Tabs>
+            </Card>
+          </>
+        ) : null}
+        </div>
+      </Modal>
 
       <Modal
         title={editingSchedule ? '编辑时间段' : '添加时间段'}

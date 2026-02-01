@@ -877,10 +877,11 @@ authorization: token字符串（可选）
 
 ### 9.2 教练列表查询（queryByAll）
 
-支持按**城市、运动类型、区域、手机号**等组合筛选，所有筛选参数均为可选；不传任何筛选条件时返回所有教练。多个条件之间为 **AND** 关系。
+支持按**城市、运动类型、区域、手机号、是否认证**等组合筛选，所有筛选参数均为可选；不传任何筛选条件时返回所有教练。多个条件之间为 **AND** 关系。
 
 - **全国**：请求时传 `cityId: 0` 或 `cityId: -1` 表示全国，接口**不按城市筛选**，返回**所有城市**的教练；城市列表来自 `/domain/getAllFilterTypes`，其中「全国」为 `cityId: 0`。
 - **手机号**：传 `phone` 时按教练关联用户（qdd_user）的手机号**模糊匹配**，可与城市、运动类型、区域等条件同时使用。
+- **是否认证**：传 `isVerified: 0` 可只查**未认证**教练（含未启用 status=0 的教练，便于审核列表），传 `1` 可只查已认证教练；不传则不按认证状态筛选，且默认只返回**启用**教练（status=1）。
 
 #### 接口地址
 ```
@@ -904,6 +905,7 @@ Content-Type: `application/json`
   "areaId": 1,
   "area": "陆家嘴",
   "phone": "138",
+  "isVerified": 0,
   "pageNum": 1,
   "pageSize": 10,
   "sortBy": "rating",
@@ -917,6 +919,7 @@ Content-Type: `application/json`
 - **运动类型**：`domainId`（String，大领域ID）、`sportTypeId`（Integer，具体运动类型ID，优先级高于 domainId）；可只传 domainId、只传 sportTypeId 或同时传（会校验 sportTypeId 是否属于 domainId）；都未传则不按类型筛选
 - **区域**：`areaId`（Long，关联 **qdd_area.id**，优先）、`area`（地区/商圈名称，当 areaId 为空时按教学区域 t_areas 模糊匹配）；二选一或同时传
 - **手机号**：`phone`（String，可选），按教练关联用户（qdd_user）的手机号**模糊匹配**，支持部分号码查询
+- **是否认证**：`isVerified`（Integer，可选），`0`=未认证、`1`=已认证；不传则不按认证状态筛选且仅返回启用教练；传 `0` 时返回未认证教练（含未启用教练，便于审核）
 - **分页与排序**：`pageNum`（默认 1）、`pageSize`（默认 10）、`sortBy`（rating / price / distance）、`sortOrder`（asc / desc）
 - **位置**：`head.userLongitude`、`head.userLatitude`（用于距离计算）、`maxDistance`（最大距离，公里）
 
@@ -971,6 +974,41 @@ Content-Type: `application/json`
 - `isOnline`: 是否在线（0：离线，1：在线）
 - `status`: 状态（0：禁用，1：启用）
 - `sportTypeIds`: 运动类型ID列表（Integer数组）
+
+### 9.3 更新教练认证状态（verify）
+
+用于更新教练的 `isVerified`（0=未认证，1=已认证）及可选 `status`（0=禁用，1=启用），例如审核通过后将其设为已认证并启用。
+
+#### 接口地址
+```
+POST /coach/verify
+```
+
+#### 请求方式
+Content-Type: `application/json`
+
+#### 请求头
+```
+authorization: token字符串（可选）
+```
+
+#### 请求体
+```json
+{
+  "coachId": "教练ID（必填，String类型，业务标识符）",
+  "isVerified": 1,
+  "status": 1
+}
+```
+
+#### 请求字段说明
+- `coachId`: 教练ID（必填，String类型，业务标识符）
+- `isVerified`: 是否认证（必填，Integer）：`0`=未认证，`1`=已认证
+- `status`: 状态（可选，Integer）：`0`=禁用，`1`=启用；不传则不更新 status
+
+#### 响应示例
+- 成功：`{ "success": true, "data": null }`
+- 失败：`{ "success": false, "message": "错误信息" }`（如教练ID为空、isVerified 非 0/1、status 非 0/1、教练不存在等）
 
 ---
 

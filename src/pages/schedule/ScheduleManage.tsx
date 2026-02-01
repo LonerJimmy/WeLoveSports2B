@@ -46,6 +46,12 @@ const ScheduleManage = () => {
   const fetchSchedules = async () => {
     if (!coachId) return
 
+    const token = localStorage.getItem('token')
+    if (!token) {
+      message.warning('请先登录后再查看预约时间')
+      return
+    }
+
     try {
       setLoading(true)
       const startDate = dayjs().format('YYYY-MM-DD')

@@ -97,6 +97,7 @@ export interface CoachListItem {
   coachTypeName?: string
   certifications?: Certification[]
   awards?: Award[]
+  /** 是否认证（0：未认证，1：已认证） */
   isVerified: number
   isOnline: number
   status: number
@@ -217,6 +218,8 @@ export interface CoachQueryParams {
   sportTypeId?: number
   /** 手机号（queryByAll 按教练关联用户手机号模糊匹配） */
   phone?: string
+  /** 是否认证（0：未认证/待审核，1：已认证；待审核列表传 isVerified=0） */
+  isVerified?: number
   pageNum?: number
   pageSize?: number
   sortBy?: string

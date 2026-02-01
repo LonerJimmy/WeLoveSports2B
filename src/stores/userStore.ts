@@ -41,10 +41,12 @@ export const useUserStore = create<UserState>()(
       },
 
       login: (token: string) => {
+        localStorage.setItem('token', token)
         set({ token, isAuthenticated: true })
       },
 
       logout: () => {
+        localStorage.removeItem('token')
         set({
           token: null,
           userInfo: null,
@@ -83,6 +85,9 @@ export const useUserStore = create<UserState>()(
         isCoach: state.isCoach,
       }),
       onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          localStorage.setItem('token', state.token)
+        }
         state?.setHasHydrated(true)
       },
     }

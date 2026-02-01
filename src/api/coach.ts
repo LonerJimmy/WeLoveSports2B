@@ -61,7 +61,7 @@ export const updateScheduleStatus = (data: { scheduleId: number; status: number 
   return request.post('/coach/updateStatus', data)
 }
 
-// 查看教练已预约的时间段
+// 查看教练已预约的时间段（POST /api/coach/initCoachSchedule，由代理转发到后端）
 export const getCoachSchedules = (coachId: string, startDate: string, endDate: string): Promise<AxiosResponse<ApiResponse<any>>> => {
   return request.post('/coach/initCoachSchedule', { coachId, startDate, endDate })
 }
@@ -69,4 +69,23 @@ export const getCoachSchedules = (coachId: string, startDate: string, endDate: s
 // 删除预约时间
 export const deleteSchedule = (scheduleId: number, coachId: string): Promise<AxiosResponse<ApiResponse<any>>> => {
   return request.post('/coach/delete', { scheduleId, coachId })
+}
+
+/**
+ * 更新教练认证状态（verify）
+ * POST /coach/verify
+ * 请求体：{ coachId, isVerified, status? }
+ * - isVerified：0=未认证，1=已认证（审核通过传 1）
+ * - status（可选）：0=禁用，1=启用；不传则不更新 status；审核通过时传 1 表示启用
+ */
+export const verifyCoach = (
+  coachId: string,
+  isVerified: number,
+  status?: number
+): Promise<AxiosResponse<ApiResponse<any>>> => {
+  const body: { coachId: string; isVerified: number; status?: number } = { coachId, isVerified }
+  if (status !== undefined) {
+    body.status = status
+  }
+  return request.post('/coach/verify', body)
 }

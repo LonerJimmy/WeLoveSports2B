@@ -29,17 +29,18 @@ const Login = () => {
     }
   }, [isAuthenticated, hasHydrated, navigate, from, location.pathname])
 
-  const handleLogin = async (values: any) => {
+  const handleLogin = async (values: { phone: string; code: string }) => {
     try {
       setLoading(true)
       const data: LoginRequest = {
-        loginType: 'phone',
-        phone: values.phone,
-        password: values.password,
         head: {
+          clientId: '37002027491260519040',
           userLongitude: 121.473701,
           userLatitude: 31.230416,
         },
+        loginType: 'phone',
+        phone: values.phone,
+        code: values.code,
       }
 
       const res = await login(data)
@@ -78,13 +79,14 @@ const Login = () => {
           />
         </Form.Item>
         <Form.Item
-          name="password"
-          rules={[{ required: true, message: '请输入密码' }]}
+          name="code"
+          rules={[{ required: true, message: '请输入验证码' }, { len: 6, message: '验证码为6位' }]}
         >
-          <Input.Password
+          <Input
             prefix={<LockOutlined />}
-            placeholder="密码"
+            placeholder="验证码（6位）"
             size="large"
+            maxLength={6}
           />
         </Form.Item>
         <Form.Item>
